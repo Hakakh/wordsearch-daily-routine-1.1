@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Trò Chơi Wordsearch Chủ Đề Hoạt Động Hàng Ngày</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        .container {
+            display: flex;
+            flex-direction: row;
+            gap: 40px;
+            max-width: 100%;
+            flex-wrap: wrap;
+        }
+        #puzzle {
+            border: 2px solid #333;
+            background-color: white;
+            user-select: none;
+            touch-action: none;
+            display: grid;
+        }
+        .cell {
+            width: 38px;
+            height: 38px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #ddd;
+            font-size: 16px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .cell.selected {
+            background-color: #aaffaa;
+        }
+        .cell.found {
+            font-weight: bold;
+            color: white !important;
+        }
+        .cell.hint {
+            background-color: #ffff99;
+        }
+        #word-list {
+            max-width: 360px;
+            max-height: 700px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        #word-list h3 {
+            margin-top: 0;
+            font-size: 20px;
+        }
+        #word-list ul {
+            list-style: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        #word-list li {
+            margin: 8px 0;
+            font-size: 18px;
+        }
+        #word-list li.found {
+            text-decoration: line-through;
+            color: #888;
+        }
+        #restart {
+            margin-top: 10px;
+            padding: 12px 24px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        #restart:hover {
+            background-color: #0056b3;
+        }
+        #status, #high-score, #timer, #error-message {
+            font-size: 18px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        #error-message {
+            color: red;
+        }
+        @media (max-width: 768px) {
+            .cell {
+                width: 34px;
+                height: 34px;
+                font-size: 15px;
+            }
+            #puzzle {
+                grid-template-columns: repeat(25, 34px);
+            }
+            #word-list {
+                max-width: 100%;
+                margin-top: 20px;
+                max-height: 500px;
+            }
+            #word-list ul {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            #word-list li {
+                font-size: 18px;
+            }
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div>
+            <div id="puzzle"></div>
+            <div id="status">Đã tìm: 0/26 từ</div>
+            <div id="timer">Thời gian: 00:00</div>
+            <div id="high-score">Điểm cao: 0 từ, Thời gian tốt nhất: chưa có</div>
+            <div id="error-message"></div>
+            <button id="restart">Chơi lại</button>
+        </div>
+        <div id="word-list">
+            <h3>Danh sách từ</h3>
+            <ul id="words"></ul>
+        </div>
+    </div>
+    <script>
+        const words = [
+            'Walk the dog', 'Make the bed', 'Ride a bike', 'Have a bath', 'Brush my teeth',
+            'Read a book', 'Play the guitar', 'Go to school', 'Wash the car', 'Wake up',
+            'Have dinner', 'Play football', 'Clean the house', 'Have a shower', 'Watch TV',
+            'Listen to music', 'Get dressed', 'Take the bus', 'Do my homework', 'Water the plants',
+            'Comb my hair', 'Go to bed', 'Have breakfast', 'Go home', 'Write', 'Play video games'
+        ].map(word => word.toUpperCase().replace(/[- &]/g, ''));
+
+        const displayWords = [
+            'Dắt chó đi dạo', 'Dọn giường', 'Đạp xe', 'Tắm bồn', 'Đánh răng', 'Đọc sách',
+            'Chơi guitar', 'Đi học', 'Rửa xe', 'Thức dậy', 'Ăn tối', 'Chơi bóng đá',
+            'Dọn nhà', 'Tắm vòi', 'Xem TV', 'Nghe nhạc', 'Mặc quần áo', 'Đi xe buýt',
+            'Làm bài tập', 'Tưới cây', 'Chải tóc', 'Đi ngủ', 'Ăn sáng', 'Về nhà', 'Viết',
+            'Chơi trò chơi điện tử'
+        ];
+
+        const colorSets = [
+            '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0',
+            '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8',
+            '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', '#ff4500',
+            '#da70d6', '#eee8aa', '#98fb98', '#1e90ff', '#ff69b4'
+        ];
+
+        const gridSize = 25;
+        let grid = [];
+        let selectedCells = [];
+        let foundWords = [];
+        let startCell = null;
+        let unplacedWords = [];
+        let placedWordDirections = [];
+        let startTime = null;
+        let timerInterval = null;
+        let wordColors = {};
+        let initAttempts = 0;
+        const maxInitAttempts = 100;
+
+        function initGrid() {
+            grid = Array(gridSize).fill().map(() => Array(gridSize).fill(''));
+            unplacedWords = [];
+            placedWordDirections = [];
+            wordColors = {};
+            placeWords();
+            if (unplacedWords.length > 0 && initAttempts < maxInitAttempts) {
+                console.warn(`Thử lại lần ${initAttempts + 1} vì có ${unplacedWords.length} từ không đặt được:`, unplacedWords.map((_, i) => displayWords[i]));
+                initAttempts++;
+                initGrid();
+            } else if (unplacedWords.length > 0) {
+                console.error('Không thể đặt tất cả từ sau', maxInitAttempts, 'lần thử:', unplacedWords.map((_, i) => displayWords[i]));
+                document.getElementById('error-message').textContent = `Lỗi: Không thể đặt các từ: ${unplacedWords.map((_, i) => displayWords[i]).join(', ')}. Vui lòng nhấn "Chơi lại".`;
+            } else {
+                document.getElementById('error-message').textContent = '';
+                fillEmptyCells();
+                showInitialHint();
+                console.table(placedWordDirections.map(({ word, direction, reverse, start }) => ({
+                    Từ: word,
+                    Hướng: direction,
+                    Ngược: reverse,
+                    'Hàng Bắt Đầu': start.row,
+                    'Cột Bắt Đầu': start.col
+                })));
+            }
+        }
+
+        function placeWords() {
+            const directions = [
+                { dr: 0, dc: 1, name: 'ngang phải' },
+                { dr: 0, dc: -1, name: 'ngang trái' },
+                { dr: 1, dc: 0, name: 'dọc xuống' },
+                { dr: -1, dc: 0, name: 'dọc lên' },
+                { dr: 1, dc: 1, name: 'chéo xuống phải' },
+                { dr: -1, dc: 1, name: 'chéo lên phải' },
+                { dr: 1, dc: -1, name: 'chéo xuống trái' },
+                { dr: -1, dc: -1, name: 'chéo lên trái' }
+            ];
+
+            const sortedWords = words.map((word, index) => ({ word, index }))
+                .sort((a, b) => a.word.length - b.word.length);
+
+            sortedWords.forEach(({ word, index }) => {
+                let placed = false;
+                let attempts = 0;
+                const maxAttempts = 10000;
+
+                while (!placed && attempts < maxAttempts) {
+                    attempts++;
+                    const dir = directions[Math.floor(Math.random() * directions.length)];
+                    const row = Math.floor(Math.random() * gridSize);
+                    const col = Math.floor(Math.random() * gridSize);
+                    const reverse = Math.random() > 0.9;
+                    const wordToPlace = reverse ? word.split('').reverse().join('') : word;
+
+                    if (canPlaceWord(wordToPlace, row, col, dir)) {
+                        placeWord(wordToPlace, row, col, dir);
+                        placedWordDirections.push({
+                            word: displayWords[index],
+                            direction: dir.name,
+                            reverse: reverse,
+                            start: { row, col }
+                        });
+                        placed = true;
+                    }
+                }
+                if (!placed) {
+                    unplacedWords.push(word);
+                    console.error(`Không thể đặt từ: ${displayWords[index]} sau ${maxAttempts} lần thử`);
+                }
+            });
+        }
+
+        function canPlaceWord(word, row, col, dir) {
+            const len = word.length;
+            for (let i = 0; i < len; i++) {
+                const r = row + i * dir.dr;
+                const c = col + i * dir.dc;
+                if (r < 0 || r >= gridSize || c < 0 || c >= gridSize) {
+                    return false;
+                }
+                if (grid[r][c] !== '' && grid[r][c] !== word[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function placeWord(word, row, col, dir) {
+            for (let i = 0; i < word.length; i++) {
+                const r = row + i * dir.dr;
+                const c = col + i * dir.dc;
+                grid[r][c] = word[i];
+            }
+        }
+
+        function fillEmptyCells() {
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    if (grid[r][c] === '') {
+                        grid[r][c] = letters[Math.floor(Math.random() * letters.length)];
+                    }
+                }
+            }
+        }
+
+        function showInitialHint() {
+            const hintWords = [];
+            while (hintWords.length < 3 && placedWordDirections.length > 0) {
+                const index = Math.floor(Math.random() * placedWordDirections.length);
+                const wordInfo = placedWordDirections[index];
+                if (!hintWords.includes(wordInfo)) {
+                    hintWords.push(wordInfo);
+                }
+            }
+
+            hintWords.forEach(wordInfo => {
+                const { start, direction, reverse, word } = wordInfo;
+                const wordToPlace = reverse ? words[displayWords.indexOf(word)].split('').reverse().join('') : words[displayWords.indexOf(word)];
+                const dir = [
+                    { dr: 0, dc: 1, name: 'ngang phải' },
+                    { dr: 0, dc: -1, name: 'ngang trái' },
+                    { dr: 1, dc: 0, name: 'dọc xuống' },
+                    { dr: -1, dc: 0, name: 'dọc lên' },
+                    { dr: 1, dc: 1, name: 'chéo xuống phải' },
+                    { dr: -1, dc: 1, name: 'chéo lên phải' },
+                    { dr: 1, dc: -1, name: 'chéo xuống trái' },
+                    { dr: -1, dc: -1, name: 'chéo lên trái' }
+                ].find(d => d.name === direction);
+
+                for (let i = 0; i < wordToPlace.length; i++) {
+                    const r = start.row + i * dir.dr;
+                    const c = start.col + i * dir.dc;
+                    const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+                    if (cell) cell.classList.add('hint');
+                }
+            });
+
+            setTimeout(() => {
+                document.querySelectorAll('.cell.hint').forEach(cell => cell.classList.remove('hint'));
+            }, 7000);
+        }
+
+        function renderGrid() {
+            const puzzle = document.getElementById('puzzle');
+            puzzle.innerHTML = '';
+            puzzle.style.gridTemplateColumns = `repeat(${gridSize}, 38px)`;
+
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.textContent = grid[r][c];
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    puzzle.appendChild(cell);
+                }
+            }
+        }
+
+        function renderWordList() {
+            const ul = document.getElementById('words');
+            ul.innerHTML = '';
+            displayWords.forEach((word, index) => {
+                const li = document.createElement('li');
+                li.textContent = word;
+                if (foundWords.includes(words[index])) {
+                    li.classList.add('found');
+                }
+                ul.appendChild(li);
+            });
+            updateStatus();
+        }
+
+        function updateStatus() {
+            const status = document.getElementById('status');
+            status.textContent = `Đã tìm: ${foundWords.length}/${words.length} từ`;
+            updateHighScore();
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                const seconds = (elapsed % 60).toString().padStart(2, '0');
+                document.getElementById('timer').textContent = `Thời gian: ${minutes}:${seconds}`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            return Math.floor((Date.now() - startTime) / 1000);
+        }
+
+        function updateHighScore() {
+            const highScore = localStorage.getItem('wordsearchHighScore') || 0;
+            const bestTime = localStorage.getItem('wordsearchBestTime') || null;
+            const currentScore = foundWords.length;
+
+            if (currentScore > highScore) {
+                localStorage.setItem('wordsearchHighScore', currentScore);
+            }
+            if (currentScore === words.length) {
+                const currentTime = stopTimer();
+                if (!bestTime || currentTime < bestTime) {
+                    localStorage.setItem('wordsearchBestTime', currentTime);
+                }
+            }
+
+            const displayBestTime = bestTime
+                ? `${Math.floor(bestTime / 60).toString().padStart(2, '0')}:${(bestTime % 60).toString().padStart(2, '0')}`
+                : 'chưa có';
+            document.getElementById('high-score').textContent = `Điểm cao: ${Math.max(highScore, currentScore)} từ, Thời gian tốt nhất: ${displayBestTime}`;
+        }
+
+        function getCellFromCoordinates(x, y) {
+            const puzzle = document.getElementById('puzzle');
+            const rect = puzzle.getBoundingClientRect();
+            const cellWidth = window.innerWidth <= 768 ? 34 : 38;
+            const col = Math.floor((x - rect.left) / cellWidth);
+            const row = Math.floor((y - rect.top) / cellWidth);
+            if (row >= 0 && row < gridSize && col >= 0 && col < gridSize) {
+                return document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+            }
+            return null;
+        }
+
+        function handleStart(e) {
+            e.preventDefault();
+            let target = e.target;
+            if (e.type === 'touchstart') {
+                const touch = e.touches[0];
+                target = document.elementFromPoint(touch.clientX, touch.clientY);
+            }
+            if (target && target.classList.contains('cell') && !target.classList.contains('found')) {
+                startCell = target;
+                selectedCells = [startCell];
+                startCell.classList.add('selected');
+                document.addEventListener('mousemove', handleMove, { passive: false });
+                document.addEventListener('mouseup', handleEnd);
+                document.addEventListener('touchmove', handleMove, { passive: false });
+                document.addEventListener('touchend', handleEnd);
+            }
+        }
+
+        function handleMove(e) {
+            e.preventDefault();
+            let target;
+            if (e.type === 'touchmove') {
+                const touch = e.touches[0];
+                target = document.elementFromPoint(touch.clientX, touch.clientY);
+            } else {
+                target = e.target;
+            }
+            if (target && target.classList.contains('cell') && !target.classList.contains('found')) {
+                clearSelection();
+                selectCellsBetween(startCell, target);
+            }
+        }
+
+        function handleEnd(e) {
+            e.preventDefault();
+            document.removeEventListener('mousemove', handleMove);
+            document.removeEventListener('mouseup', handleEnd);
+            document.removeEventListener('touchmove', handleMove);
+            document.removeEventListener('touchend', handleEnd);
+            checkSelectedWord();
+            clearSelection();
+            startCell = null;
+        }
+
+        function selectCellsBetween(start, end) {
+            const startRow = parseInt(start.dataset.row);
+            const startCol = parseInt(start.dataset.col);
+            const endRow = parseInt(end.dataset.row);
+            const endCol = parseInt(end.dataset.col);
+
+            const dr = endRow - startRow;
+            const dc = endCol - startCol;
+            const steps = Math.max(Math.abs(dr), Math.abs(dc));
+            if (steps === 0) return;
+
+            const stepRow = dr / steps;
+            const stepCol = dc / steps;
+
+            selectedCells = [];
+            for (let i = 0; i <= steps; i++) {
+                const r = Math.round(startRow + i * stepRow);
+                const c = Math.round(startCol + i * stepCol);
+                if (r >= 0 && r < gridSize && c >= 0 && c < gridSize) {
+                    const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+                    if (cell && !cell.classList.contains('found')) {
+                        selectedCells.push(cell);
+                        cell.classList.add('selected');
+                    }
+                }
+            }
+        }
+
+        function clearSelection() {
+            selectedCells.forEach(cell => cell.classList.remove('selected'));
+            selectedCells = [];
+        }
+
+        function checkSelectedWord() {
+            const selectedText = selectedCells.map(cell => cell.textContent).join('');
+            const reverseText = selectedText.split('').reverse().join('');
+            let wordFound = null;
+            let wordIndex = null;
+
+            if (words.includes(selectedText)) {
+                wordFound = selectedText;
+                wordIndex = words.indexOf(selectedText);
+            } else if (words.includes(reverseText)) {
+                wordFound = reverseText;
+                wordIndex = words.indexOf(reverseText);
+            }
+
+            if (wordFound) {
+                foundWords.push(wordFound);
+                const color = colorSets[foundWords.length - 1] || colorSets[Math.floor(Math.random() * colorSets.length)];
+                wordColors[wordFound] = color;
+                selectedCells.forEach(cell => {
+                    cell.classList.add('found');
+                    cell.style.backgroundColor = color;
+                });
+                renderWordList();
+                confetti({
+                    particleCount: 40,
+                    spread: 60,
+                    origin: { y: 0.6 },
+                    colors: ['#ff0000', '#00ff00', '#0000ff', '#ffff00']
+                });
+                console.log(`Tìm thấy từ: ${displayWords[wordIndex]} (${words[wordIndex]}) với màu: ${color}`);
+                if (foundWords.length === words.length) {
+                    alert('Chúc mừng! Bạn đã tìm hết tất cả các từ!');
+                    stopTimer();
+                }
+            }
+        }
+
+        function restartGame() {
+            foundWords = [];
+            initAttempts = 0;
+            initGrid();
+            renderGrid();
+            renderWordList();
+            startTimer();
+        }
+
+        function init() {
+            initAttempts = 0;
+            initGrid();
+            renderGrid();
+            renderWordList();
+            startTimer();
+            const puzzle = document.getElementById('puzzle');
+            puzzle.addEventListener('mousedown', handleStart);
+            puzzle.addEventListener('touchstart', handleStart);
+            document.getElementById('restart').addEventListener('click', restartGame);
+        }
+
+        init();
+    </script>
+</body>
+</html>
