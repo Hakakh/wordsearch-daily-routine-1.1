@@ -51,6 +51,7 @@
         .cell.found {
             font-weight: bold;
             color: white !important;
+            transition: background-color 0.2s;
         }
         .cell.hint {
             background-color: #ffff99;
@@ -181,7 +182,7 @@
         const maxInitAttempts = 100;
 
         function initGrid() {
-            grid = Array(gridSize).fill().map(() => Array(gridSize).fill(''));
+            grid = Array(gridSize).fill().map(() => Array(gridSize).fill().map(() => ({ letter: '', words: [] })));
             unplacedWords = [];
             placedWordDirections = [];
             wordColors = {};
@@ -261,7 +262,7 @@
                 if (r < 0 || r >= gridSize || c < 0 || c >= gridSize) {
                     return false;
                 }
-                if (grid[r][c] !== '' && grid[r][c] !== word[i]) {
+                if (grid[r][c].letter !== '' && grid[r][c].letter !== word[i]) {
                     return false;
                 }
             }
@@ -272,7 +273,9 @@
             for (let i = 0; i < word.length; i++) {
                 const r = row + i * dir.dr;
                 const c = col + i * dir.dc;
-                grid[r][c] = word[i];
+                grid[r][c].letter = word[i];
+                if (!grid[r][c].words) grid[r][c].words = [];
+                grid[r][c].words.push(word);
             }
         }
 
@@ -280,8 +283,8 @@
             const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
-                    if (grid[r][c] === '') {
-                        grid[r][c] = letters[Math.floor(Math.random() * letters.length)];
+                    if (grid[r][c].letter === '') {
+                        grid[r][c].letter = letters[Math.floor(Math.random() * letters.length)];
                     }
                 }
             }
@@ -333,9 +336,10 @@
                 for (let c = 0; c < gridSize; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
-                    cell.textContent = grid[r][c];
+                    cell.textContent = grid[r][c].letter;
                     cell.dataset.row = r;
                     cell.dataset.col = c;
+                    cell.dataset.words = grid[r][c].words ? grid[r][c].words.join(',') : '';
                     puzzle.appendChild(cell);
                 }
             }
@@ -408,7 +412,7 @@
             const col = Math.floor((x - rect.left) / cellWidth);
             const row = Math.floor((y - rect.top) / cellWidth);
             if (row >= 0 && row < gridSize && col >= 0 && col < gridSize) {
-                return document.querySelector(`.cell[data-row="${row}"][data-col="${c}"]`);
+                return document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
             }
             return null;
         }
@@ -420,14 +424,17 @@
                 const touch = e.touches[0];
                 target = document.elementFromPoint(touch.clientX, touch.clientY);
             }
-            if (target && target.classList.contains('cell') && !target.classList.contains('found')) {
-                startCell = target;
-                selectedCells = [startCell];
-                startCell.classList.add('selected');
-                document.addEventListener('mousemove', handleMove, { passive: false });
-                document.addEventListener('mouseup', handleEnd);
-                document.addEventListener('touchmove', handleMove, { passive: false });
-                document.addEventListener('touchend', handleEnd);
+            if (target && target.classList.contains('cell')) {
+                const foundWordsInCell = target.dataset.foundWords ? target.dataset.foundWords.split(',').filter(word => word) : [];
+                if (!foundWordsInCell.every(word => foundWords.includes(word))) {
+                    startCell = target;
+                    selectedCells = [startCell];
+                    startCell.classList.add('selected');
+                    document.addEventListener('mousemove', handleMove, { passive: false });
+                    document.addEventListener('mouseup', handleEnd);
+                    document.addEventListener('touchmove', handleMove, { passive: false });
+                    document.addEventListener('touchend', handleEnd);
+                }
             }
         }
 
@@ -440,9 +447,12 @@
             } else {
                 target = e.target;
             }
-            if (target && target.classList.contains('cell') && !target.classList.contains('found')) {
-                clearSelection();
-                selectCellsBetween(startCell, target);
+            if (target && target.classList.contains('cell')) {
+                const foundWordsInCell = target.dataset.foundWords ? target.dataset.foundWords.split(',').filter(word => word) : [];
+                if (!foundWordsInCell.every(word => foundWords.includes(word))) {
+                    clearSelection();
+                    selectCellsBetween(startCell, target);
+                }
             }
         }
 
@@ -477,7 +487,8 @@
                 const c = Math.round(startCol + i * stepCol);
                 if (r >= 0 && r < gridSize && c >= 0 && c < gridSize) {
                     const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
-                    if (cell && !cell.classList.contains('found')) {
+                    const foundWordsInCell = cell.dataset.foundWords ? cell.dataset.foundWords.split(',').filter(word => word) : [];
+                    if (cell && !foundWordsInCell.every(word => foundWords.includes(word))) {
                         selectedCells.push(cell);
                         cell.classList.add('selected');
                     }
@@ -486,7 +497,16 @@
         }
 
         function clearSelection() {
-            selectedCells.forEach(cell => cell.classList.remove('selected'));
+            selectedCells.forEach(cell => {
+                cell.classList.remove('selected');
+                if (cell.dataset.foundWords) {
+                    const foundWordsList = cell.dataset.foundWords.split(',').filter(word => word);
+                    const latestWord = foundWordsList[foundWordsList.length - 1];
+                    cell.style.backgroundColor = wordColors[latestWord] || '';
+                } else {
+                    cell.style.backgroundColor = '';
+                }
+            });
             selectedCells = [];
         }
 
@@ -504,13 +524,17 @@
                 wordIndex = words.indexOf(reverseText);
             }
 
-            if (wordFound) {
+            if (wordFound && !foundWords.includes(wordFound)) {
                 foundWords.push(wordFound);
                 const color = colorSets[foundWords.length - 1] || colorSets[Math.floor(Math.random() * colorSets.length)];
                 wordColors[wordFound] = color;
                 selectedCells.forEach(cell => {
-                    cell.classList.add('found');
+                    if (!cell.dataset.foundWords) cell.dataset.foundWords = '';
+                    if (!cell.dataset.foundWords.includes(wordFound)) {
+                        cell.dataset.foundWords += (cell.dataset.foundWords ? ',' : '') + wordFound;
+                    }
                     cell.style.backgroundColor = color;
+                    cell.classList.add('found');
                 });
                 renderWordList();
                 confetti({
