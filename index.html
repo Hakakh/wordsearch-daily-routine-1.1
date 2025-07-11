@@ -426,7 +426,8 @@
             }
             if (target && target.classList.contains('cell')) {
                 const foundWordsInCell = target.dataset.foundWords ? target.dataset.foundWords.split(',').filter(word => word) : [];
-                if (!foundWordsInCell.every(word => foundWords.includes(word))) {
+                const cellWords = target.dataset.words ? target.dataset.words.split(',').filter(word => word) : [];
+                if (cellWords.some(word => !foundWords.includes(word))) {
                     startCell = target;
                     selectedCells = [startCell];
                     startCell.classList.add('selected');
@@ -449,7 +450,8 @@
             }
             if (target && target.classList.contains('cell')) {
                 const foundWordsInCell = target.dataset.foundWords ? target.dataset.foundWords.split(',').filter(word => word) : [];
-                if (!foundWordsInCell.every(word => foundWords.includes(word))) {
+                const cellWords = target.dataset.words ? target.dataset.words.split(',').filter(word => word) : [];
+                if (cellWords.some(word => !foundWords.includes(word))) {
                     clearSelection();
                     selectCellsBetween(startCell, target);
                 }
@@ -488,7 +490,8 @@
                 if (r >= 0 && r < gridSize && c >= 0 && c < gridSize) {
                     const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
                     const foundWordsInCell = cell.dataset.foundWords ? cell.dataset.foundWords.split(',').filter(word => word) : [];
-                    if (cell && !foundWordsInCell.every(word => foundWords.includes(word))) {
+                    const cellWords = cell.dataset.words ? cell.dataset.words.split(',').filter(word => word) : [];
+                    if (cell && cellWords.some(word => !foundWords.includes(word))) {
                         selectedCells.push(cell);
                         cell.classList.add('selected');
                     }
